@@ -85,21 +85,21 @@
             if (player.x < 0) player.x = 0;
             if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
         }
+        
+// Draw Function
+function draw() {
+    // Clear Canvas with MUCH stronger trail fade
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';  // Changed from 0.02 to 0.15 for harder dropoff
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw Function
-        function draw() {
-            // Clear Canvas
-            ctx.fillStyle = 'rgba(255,255,255,0.02)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Draw Ground
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(ground.x, ground.y, ground.width, ground.height);
 
-            // Draw Ground
-            ctx.fillStyle = '#8B4513';
-            ctx.fillRect(ground.x, ground.y, ground.width, ground.height);
-
-            // Draw Player
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
-        }
+    // Draw Player
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+}
 
         // Game Loop
         function gameLoop() {
