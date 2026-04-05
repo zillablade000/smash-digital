@@ -1,57 +1,225 @@
-// Updated: Keyboard event handling for player controls
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smash Digital</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #222; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%); }
+        #hud { position: fixed; top: 20px; left: 0; right: 0; display: flex; justify-content: space-around; color: white; font-weight: bold; font-size: 20px; z-index: 10; }
+        .player-info { background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 8px; }
+        .damage { font-size: 32px; color: #FFD700; }
+        #startScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 200; }
+        .start-content { text-align: center; color: white; background: rgba(50,50,50,0.9); padding: 40px; border-radius: 15px; border: 3px solid #4ECDC4; }
+        .start-content h1 { font-size: 36px; margin-bottom: 20px; color: #4ECDC4; }
+        .start-content p { font-size: 16px; margin: 10px 0; }
+        #startBtn { margin-top: 30px; padding: 20px 50px; font-size: 20px; background: #4ECDC4; color: black; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="hud">
+        <div class="player-info">
+            <div>P1</div>
+            <div class="damage" id="p1dmg">0%</div>
+            <div id="p1st">❤️❤️❤️</div>
+        </div>
+        <div class="player-info">
+            <div>P2</div>
+            <div class="damage" id="p2dmg">0%</div>
+            <div id="p2st">❤️❤️❤️</div>
+        </div>
+    </div>
+    <div id="startScreen">
+        <div class="start-content">
+            <h1>⚔️ SMASH DIGITAL ⚔️</h1>
+            <p><strong>Player 1:</strong> A/D (move) W (jump) Q (attack) E (shield)</p>
+            <p><strong>Player 2:</strong> ← → (move) ↑ (jump) Numpad1 (attack) Numpad2 (shield)</p>
+            <button id="startBtn">🎮 START GAME 🎮</button>
+        </div>
+    </div>
 
-function keyboardEventListeners() {
-    window.addEventListener('keydown', function(event) {
-        // Player 1 controls
-        if (event.key === 'w') {
-            // Move player 1 up
-        } else if (event.key === 'a') {
-            // Move player 1 left
-        } else if (event.key === 's') {
-            // Move player 1 down
-        } else if (event.key === 'd') {
-            // Move player 1 right
-        } else if (event.key === 'q') {
-            // Player 1 attack
-        } else if (event.key === 'e') {
-            // Player 1 shield
+    <script>
+        const GRAVITY = 0.5;
+        const MAX_FALL = 12;
+        const GROUND_FRICTION = 0.88;
+        const AIR_FRICTION = 0.98;
+        const KB_DECAY = 0.96;
+
+        const STATES = { IDLE: 'idle', RUNNING: 'running', JUMP: 'jump', FALL: 'fall', ATK: 'atk', HIT: 'hit', SHIELD: 'shield' };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let groundY = 0;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            groundY = canvas.height * 0.75;
         }
-        // Player 2 controls
-        if (event.key === 'ArrowUp') {
-            // Move player 2 up
-        } else if (event.key === 'ArrowLeft') {
-            // Move player 2 left
-        } else if (event.key === 'ArrowDown') {
-            // Move player 2 down
-        } else if (event.key === 'ArrowRight') {
-            // Move player 2 right
-        } else if (event.key === 'Numpad1') {
-            // Player 2 attack
-        } else if (event.key === 'Numpad2') {
-            // Player 2 shield
-        }
-    });
-}
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
-// Call the function to start listening to keyboard events
-keyboardEventListeners();
+        class Player {
+            constructor(x, num) {
+                this.num = num;
+                this.x = x;
+                this.y = groundY - 60;
+                this.w = 40;
+                this.h = 50;
+                this.vx = 0;
+                this.vy = 0;
+                this.dmg = 0;
+                this.stocks = 3;
+                this.state = STATES.IDLE;
+                this.facing = num === 1 ? 1 : -1;
+                this.grounded = false;
+                this.stateTimer = 0;
+                this.shield = 100;
+                this.shielding = false;
+                this.kb = { x: 0, y: 0 };
+                this.hitboxes = [];
+                this.color = num === 1 ? '#FF6B6B' : '#4ECDC4';
+            }
 
-// Update start screen instructions with keyboard controls
-const instructions = `
-Player 1 Controls: 
-W - Jump 
-A - Move Left 
-S - Move Down 
-D - Move Right 
-Q - Attack 
-E - Shield 
+            attack(isSmash) {
+                this.state = STATES.ATK;
+                this.stateTimer = 8;
+                const dmg = isSmash ? 12 : 5;
+                const baseKb = isSmash ? 10 : 4;
+                const dmgMult = 1 + this.dmg / 100;
+                const kb = baseKb * dmgMult;
+                const angle = this.facing > 0 ? 45 : 135;
+                
+                this.hitboxes.push({
+                    x: this.x + this.facing * 40,
+                    y: this.y,
+                    r: 25,
+                    dmg: dmg * dmgMult,
+                    kb: kb,
+                    angle: angle,
+                    life: 12
+                });
+            }
 
-Player 2 Controls: 
-Arrow Up - Jump 
-Arrow Left - Move Left 
-Arrow Down - Move Down 
-Arrow Right - Move Right 
-Numpad 1 - Attack 
-Numpad 2 - Shield
-`;
-document.getElementById('startScreenInstructions').innerText = instructions;
+            updatePhysics() {
+                if (!this.grounded) {
+                    this.vy += GRAVITY;
+                    this.vy = Math.min(this.vy, MAX_FALL);
+                }
+
+                if (this.grounded) {
+                    this.vx *= GROUND_FRICTION;
+                } else {
+                    this.vx *= AIR_FRICTION;
+                }
+
+                this.vx += this.kb.x;
+                this.vy += this.kb.y;
+                this.kb.x *= KB_DECAY;
+                this.kb.y *= KB_DECAY;
+
+                if (Math.abs(this.kb.x) < 0.05) this.kb.x = 0;
+                if (Math.abs(this.kb.y) < 0.05) this.kb.y = 0;
+
+                this.x += this.vx;
+                this.y += this.vy;
+                this.grounded = false;
+
+                if (this.y + this.h/2 >= groundY) {
+                    this.y = groundY - this.h/2;
+                    this.vy = 0;
+                    this.grounded = true;
+                }
+
+                if (this.x < -200 || this.x > canvas.width + 200 || this.y > canvas.height + 200) {
+                    this.stocks--;
+                    this.respawn();
+                }
+            }
+
+            updateState() {
+                if (this.stateTimer > 0) this.stateTimer--;
+                if (this.state === STATES.ATK && this.stateTimer === 0) {
+                    this.state = this.grounded ? STATES.IDLE : STATES.FALL;
+                }
+                if (this.state === STATES.HIT && this.stateTimer === 0) {
+                    this.state = this.grounded ? STATES.IDLE : STATES.FALL;
+                }
+                if (this.state === STATES.JUMP && this.vy > 0) {
+                    this.state = STATES.FALL;
+                }
+                if (this.state === STATES.SHIELD && !this.shielding) {
+                    this.state = STATES.IDLE;
+                }
+            }
+
+            updateHitboxes(other) {
+                for (let i = this.hitboxes.length - 1; i >= 0; i--) {
+                    const hb = this.hitboxes[i];
+                    const dx = hb.x - other.x;
+                    const dy = hb.y - other.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+
+                    if (dist < hb.r + 25) {
+                        if (other.shielding) {
+                            other.shield -= hb.dmg * 3;
+                            if (other.shield <= 0) {
+                                other.state = STATES.SHIELD;
+                                other.stateTimer = 20;
+                                other.shielding = false;
+                            }
+                        } else {
+                            other.dmg = Math.min(other.dmg + hb.dmg, 999);
+                            const angleRad = (hb.angle * Math.PI) / 180;
+                            other.kb.x = Math.cos(angleRad) * hb.kb;
+                            other.kb.y = Math.sin(angleRad) * hb.kb;
+                            other.state = STATES.HIT;
+                            other.stateTimer = Math.ceil(hb.kb / 2);
+                        }
+                        this.hitboxes.splice(i, 1);
+                    } else {
+                        hb.life--;
+                        if (hb.life <= 0) this.hitboxes.splice(i, 1);
+                    }
+                }
+            }
+
+            respawn() {
+                this.x = this.num === 1 ? canvas.width * 0.25 : canvas.width * 0.75;
+                this.y = groundY - 100;
+                this.vx = 0;
+                this.vy = 0;
+                this.kb = { x: 0, y: 0 };
+                this.state = STATES.IDLE;
+                this.dmg = 0;
+                this.shield = 100;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x - this.w/2, this.y - this.h/2, this.w, this.h);
+
+                if (this.shielding) {
+                    ctx.strokeStyle = 'rgba(100,200,255,0.5)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, 50, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                for (let hb of this.hitboxes) {
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(hb.x, hb.y, hb.r, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+
+            update() {
+                this.updatePhysics();
+                this.updateState();
+                this.draw
