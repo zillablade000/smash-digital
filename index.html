@@ -8,7 +8,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #222; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%); }
-        #hud { position: fixed; top: 20px; left: 0; right: 0; display: flex; justify-content: space-around; color: white; font-weight: bold; font-size: 20px; z-index: 10; }
+        #hud { position: fixed; top: 20px; display: flex; justify-content: space-around; width: 100%; color: white; font-weight: bold; z-index: 10; }
         .player-info { background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 8px; }
         .damage { font-size: 32px; color: #FFD700; }
         #startScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 200; }
@@ -24,12 +24,10 @@
         <div class="player-info">
             <div>P1</div>
             <div class="damage" id="p1dmg">0%</div>
-            <div id="p1st">❤️❤️❤️</div>
         </div>
         <div class="player-info">
             <div>P2</div>
             <div class="damage" id="p2dmg">0%</div>
-            <div id="p2st">❤️❤️❤️</div>
         </div>
     </div>
     <div id="startScreen">
@@ -43,16 +41,16 @@
 
     <script>
         const GRAVITY = 0.5;
-        const MAX_FALL = 12;
         const GROUND_FRICTION = 0.88;
         const AIR_FRICTION = 0.98;
         const KB_DECAY = 0.96;
-
         const STATES = { IDLE: 'idle', RUNNING: 'running', JUMP: 'jump', FALL: 'fall', ATK: 'atk', HIT: 'hit', SHIELD: 'shield' };
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         let groundY = 0;
+        let gameRunning = false;
+        let p1, p2;
 
         function resizeCanvas() {
             canvas.width = window.innerWidth;
@@ -85,6 +83,7 @@
             }
 
             attack(isSmash) {
+                if (this.state !== STATES.IDLE && this.state !== STATES.RUNNING) return;
                 this.state = STATES.ATK;
                 this.stateTimer = 8;
                 const dmg = isSmash ? 12 : 5;
@@ -92,7 +91,6 @@
                 const dmgMult = 1 + this.dmg / 100;
                 const kb = baseKb * dmgMult;
                 const angle = this.facing > 0 ? 45 : 135;
-                
                 this.hitboxes.push({
                     x: this.x + this.facing * 40,
                     y: this.y,
@@ -107,7 +105,7 @@
             updatePhysics() {
                 if (!this.grounded) {
                     this.vy += GRAVITY;
-                    this.vy = Math.min(this.vy, MAX_FALL);
+                    this.vy = Math.min(this.vy, 12);
                 }
 
                 if (this.grounded) {
@@ -222,4 +220,154 @@
             update() {
                 this.updatePhysics();
                 this.updateState();
-                this.draw
+                this.draw();
+            }
+        }
+
+        let inputState = {
+            p1: { left: false, right: false, jump: false, atk: false, shield: false },
+            p2: { left: false, right: false, jump: false, atk: false, shield: false }
+        };
+
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'a') inputState.p1.left = true;
+            if (key === 'd') inputState.p1.right = true;
+            if (key === 'w') inputState.p1.jump = true;
+            if (key === 'q') inputState.p1.atk = true;
+            if (key === 'e') inputState.p1.shield = true;
+            if (key === 'arrowleft') inputState.p2.left = true;
+            if (key === 'arrowright') inputState.p2.right = true;
+            if (key === 'arrowup') inputState.p2.jump = true;
+            if (key === 'enter' && !gameRunning) startGame();
+        });
+
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'a') inputState.p1.left = false;
+            if (key === 'd') inputState.p1.right = false;
+            if (key === 'w') inputState.p1.jump = false;
+            if (key === 'q') inputState.p1.atk = false;
+            if (key === 'e') inputState.p1.shield = false;
+            if (key === 'arrowleft') inputState.p2.left = false;
+            if (key === 'arrowright') inputState.p2.right = false;
+            if (key === 'arrowup') inputState.p2.jump = false;
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Numpad1') inputState.p2.atk = true;
+            if (e.code === 'Numpad2') inputState.p2.shield = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Numpad1') inputState.p2.atk = false;
+            if (e.code === 'Numpad2') inputState.p2.shield = false;
+        });
+
+        function startGame() {
+            document.getElementById('startScreen').style.display = 'none';
+            p1 = new Player(canvas.width * 0.25, 1);
+            p2 = new Player(canvas.width * 0.75, 2);
+            gameRunning = true;
+            gameLoop();
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            ctx.fillStyle = 'rgba(255,255,255,0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'rgba(139,69,19,0.8)';
+            ctx.fillRect(0, groundY, canvas.width, 30);
+
+            if (inputState.p1.left) {
+                p1.facing = -1;
+                if (p1.grounded && p1.state === STATES.IDLE) {
+                    p1.state = STATES.RUNNING;
+                    p1.vx = -5;
+                }
+            }
+            if (inputState.p1.right) {
+                p1.facing = 1;
+                if (p1.grounded && p1.state === STATES.IDLE) {
+                    p1.state = STATES.RUNNING;
+                    p1.vx = 5;
+                }
+            }
+            if (inputState.p1.jump && p1.grounded && p1.state === STATES.IDLE) {
+                p1.state = STATES.JUMP;
+                p1.vy = -12;
+                p1.grounded = false;
+                inputState.p1.jump = false;
+            }
+            if (inputState.p1.atk && (p1.state === STATES.IDLE || p1.state === STATES.RUNNING)) {
+                p1.attack(false);
+                inputState.p1.atk = false;
+            }
+            if (inputState.p1.shield && p1.grounded && p1.state === STATES.IDLE) {
+                p1.state = STATES.SHIELD;
+                p1.shielding = true;
+            } else if (!inputState.p1.shield) {
+                p1.shielding = false;
+            }
+
+            if (inputState.p2.left) {
+                p2.facing = -1;
+                if (p2.grounded && p2.state === STATES.IDLE) {
+                    p2.state = STATES.RUNNING;
+                    p2.vx = -5;
+                }
+            }
+            if (inputState.p2.right) {
+                p2.facing = 1;
+                if (p2.grounded && p2.state === STATES.IDLE) {
+                    p2.state = STATES.RUNNING;
+                    p2.vx = 5;
+                }
+            }
+            if (inputState.p2.jump && p2.grounded && p2.state === STATES.IDLE) {
+                p2.state = STATES.JUMP;
+                p2.vy = -12;
+                p2.grounded = false;
+                inputState.p2.jump = false;
+            }
+            if (inputState.p2.atk && (p2.state === STATES.IDLE || p2.state === STATES.RUNNING)) {
+                p2.attack(false);
+                inputState.p2.atk = false;
+            }
+            if (inputState.p2.shield && p2.grounded && p2.state === STATES.IDLE) {
+                p2.state = STATES.SHIELD;
+                p2.shielding = true;
+            } else if (!inputState.p2.shield) {
+                p2.shielding = false;
+            }
+
+            p1.update();
+            p2.update();
+            p1.updateHitboxes(p2);
+            p2.updateHitboxes(p1);
+
+            document.getElementById('p1dmg').textContent = Math.floor(p1.dmg) + '%';
+            document.getElementById('p2dmg').textContent = Math.floor(p2.dmg) + '%';
+
+            if (p1.stocks <= 0 || p2.stocks <= 0) {
+                gameRunning = false;
+                ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(p1.stocks > 0 ? 'PLAYER 1 WINS!' : 'PLAYER 2 WINS!', canvas.width/2, canvas.height/2);
+                ctx.font = '20px Arial';
+                ctx.fillText('Refresh to play again', canvas.width/2, canvas.height/2 + 50);
+                return;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.getElementById('startBtn').addEventListener('click', startGame);
+    </script>
+</body>
+</html>
